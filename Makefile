@@ -1,4 +1,4 @@
-.PHONY: help deps fmt vet test build run e2e check clean
+.PHONY: help deps fmt vet test build build-windows build-linux run e2e check clean
 
 POWERSHELL := powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass
 
@@ -20,6 +20,12 @@ test:
 
 build:
 	go build -o bin/opencode-mcp-bridge.exe ./cmd
+
+build-windows:
+	$(POWERSHELL) -Command "$$env:GOOS='windows'; $$env:GOARCH='amd64'; go build -o bin/opencode-mcp-bridge-windows-amd64.exe ./cmd"
+
+build-linux:
+	$(POWERSHELL) -Command "$$env:GOOS='linux'; $$env:GOARCH='amd64'; go build -o bin/opencode-mcp-bridge-linux-amd64 ./cmd"
 
 run:
 	go run ./cmd
