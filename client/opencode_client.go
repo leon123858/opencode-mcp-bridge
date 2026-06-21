@@ -16,7 +16,7 @@ import (
 	bridgetypes "github.com/a0970/opencodemcpbridge/types"
 )
 
-const StartHint = "請先執行 `opencode serve` 啟動 OpenCode 伺服器"
+const StartHint = "Please run `opencode serve` first to start the OpenCode server"
 
 var ErrUnavailable = errors.New("cannot connect to OpenCode server")
 
