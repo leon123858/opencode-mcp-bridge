@@ -26,9 +26,10 @@ The Streamable HTTP endpoint is `http://localhost:8080/mcp` (the root path `/` i
 ```json
 {
   "mcpServers": {
-    "opencode": {
-      "url": "http://localhost:8080/mcp"
-    }
+		"opencode": {
+			"url": "http://localhost:8080/mcp/sse",
+			"timeout": 3600
+		}
   }
 }
 ```
