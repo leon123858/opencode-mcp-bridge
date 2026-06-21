@@ -59,7 +59,8 @@ while ((Get-Date) -lt $deadline) {
             Write-Host "Bridge started (PID $($process.Id)) at http://127.0.0.1:${Port}"
             exit 0
         }
-    } catch {
+    }
+    catch {
         Start-Sleep -Milliseconds 500
     }
 }
@@ -67,7 +68,8 @@ while ((Get-Date) -lt $deadline) {
 try {
     Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
     Wait-Process -Id $process.Id -Timeout 10 -ErrorAction SilentlyContinue
-} finally {
+}
+finally {
     Remove-Item -LiteralPath $pidFile -Force -ErrorAction SilentlyContinue
 }
 throw "Bridge did not become healthy within $WaitSeconds seconds. See $stderrFile"

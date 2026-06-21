@@ -8,7 +8,7 @@ $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $runDirectory = Join-Path $projectRoot ".run"
 $coverageProfile = Join-Path $runDirectory "coverage.out"
-$env:GOCACHE = Join-Path $projectRoot ".cache\go-build"
+
 $packages = @(
     "./client",
     "./config",

@@ -103,6 +103,17 @@ try {
     $setup = Invoke-RestMethod -Uri "${bridgeUrl}/opencode/setup" -TimeoutSec 10
     Assert-True ($setup.healthy -eq $true) "GET /opencode/setup did not report a healthy OpenCode server"
 
+    Write-Host "[e2e] Checking legacy MCP SSE endpoint..."
+    $legacySseOutput = & curl.exe `
+        --silent `
+        --no-buffer `
+        --max-time 2 `
+        -H "Accept: text/event-stream" `
+        "${bridgeUrl}/mcp/sse"
+    $legacySseText = $legacySseOutput -join "`n"
+    Assert-True ($legacySseText -match 'event:\s*endpoint') "Legacy MCP SSE did not return an endpoint event"
+    Assert-True ($legacySseText -match '/mcp/sse\?sessionid=') "Legacy MCP SSE returned an invalid message endpoint"
+
     Write-Host "[e2e] Initializing MCP transport..."
     $initialize = Invoke-McpRequest 1 "initialize" @{
         protocolVersion = $mcpProtocolVersion

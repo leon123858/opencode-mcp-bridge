@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/a0970/opencodemcpbridge/client"
 	bridgetypes "github.com/a0970/opencodemcpbridge/types"
@@ -23,19 +25,19 @@ func (f fakeClient) Project(context.Context) (json.RawMessage, error) {
 	return json.RawMessage(`{"id":"project-1"}`), f.projectErr
 }
 func (fakeClient) Ask(context.Context, bridgetypes.AskRequest) (bridgetypes.MessageResponse, error) {
-	return bridgetypes.MessageResponse{SessionID: "session-1", Message: "answer"}, nil
+	return bridgetypes.MessageResponse{SessionID: "ses_1", Message: "answer"}, nil
 }
 func (fakeClient) SendMessage(context.Context, bridgetypes.ReplyRequest) (bridgetypes.MessageResponse, error) {
-	return bridgetypes.MessageResponse{SessionID: "session-1", Message: "answer"}, nil
+	return bridgetypes.MessageResponse{SessionID: "ses_1", Message: "answer"}, nil
 }
 func (fakeClient) Run(context.Context, bridgetypes.AskRequest) (bridgetypes.RunResponse, error) {
-	return bridgetypes.RunResponse{SessionID: "session-1", Status: "completed", Message: "answer"}, nil
+	return bridgetypes.RunResponse{SessionID: "ses_1", Status: "completed", Message: "answer"}, nil
 }
 func (fakeClient) Session(context.Context, string) (json.RawMessage, error) {
-	return json.RawMessage(`{"id":"session-1"}`), nil
+	return json.RawMessage(`{"id":"ses_1"}`), nil
 }
 func (fakeClient) SessionStatuses(context.Context) (json.RawMessage, error) {
-	return json.RawMessage(`{"session-1":{"type":"idle"}}`), nil
+	return json.RawMessage(`{"ses_1":{"type":"idle"}}`), nil
 }
 func (fakeClient) Todos(context.Context, string) (json.RawMessage, error) {
 	return json.RawMessage(`[]`), nil
@@ -130,10 +132,10 @@ func TestCoreToolCalls(t *testing.T) {
 		args map[string]any
 	}{
 		{name: "opencode_ask", args: map[string]any{"prompt": "hello"}},
-		{name: "opencode_reply", args: map[string]any{"sessionId": "session-1", "prompt": "more"}},
+		{name: "opencode_reply", args: map[string]any{"sessionId": "ses_1", "prompt": "more"}},
 		{name: "opencode_run", args: map[string]any{"prompt": "work", "maxDurationSeconds": 1}},
-		{name: "opencode_check", args: map[string]any{"sessionId": "session-1", "detailed": true}},
-		{name: "opencode_conversation", args: map[string]any{"sessionId": "session-1", "limit": 10}},
+		{name: "opencode_check", args: map[string]any{"sessionId": "ses_1", "detailed": true}},
+		{name: "opencode_conversation", args: map[string]any{"sessionId": "ses_1", "limit": 10}},
 		{name: "opencode_sessions_overview", args: map[string]any{}},
 		{name: "opencode_mcp_servers", args: map[string]any{}},
 		{name: "opencode_provider_test", args: map[string]any{"providerId": "provider-1", "modelID": "model-1"}},
@@ -158,9 +160,12 @@ func TestToolValidation(t *testing.T) {
 		args map[string]any
 	}{
 		{name: "opencode_reply", args: map[string]any{"prompt": "x"}},
+		{name: "opencode_reply", args: map[string]any{"sessionId": "default", "prompt": "x"}},
 		{name: "opencode_run", args: map[string]any{"prompt": "x", "maxDurationSeconds": 3601}},
 		{name: "opencode_check", args: map[string]any{}},
-		{name: "opencode_conversation", args: map[string]any{"sessionId": "s", "limit": 1001}},
+		{name: "opencode_check", args: map[string]any{"sessionId": "session-1"}},
+		{name: "opencode_conversation", args: map[string]any{"sessionId": "s", "limit": 10}},
+		{name: "opencode_conversation", args: map[string]any{"sessionId": "ses_1", "limit": 1001}},
 		{name: "opencode_provider_test", args: map[string]any{"providerId": "missing"}},
 	}
 	for _, tt := range tests {
@@ -171,5 +176,35 @@ func TestToolValidation(t *testing.T) {
 		if !result.IsError {
 			t.Errorf("%s: expected validation error", tt.name)
 		}
+	}
+}
+
+func TestLegacySSETransport(t *testing.T) {
+	server, _ := New(fakeClient{})
+	httpServer := httptest.NewServer(NewLegacySSEHandler(server))
+	defer httpServer.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	client := mcp.NewClient(&mcp.Implementation{Name: "legacy-sse-test", Version: "1.0.0"}, nil)
+	session, err := client.Connect(ctx, &mcp.SSEClientTransport{Endpoint: httpServer.URL}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+
+	tools, err := session.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tools.Tools) != 9 {
+		t.Fatalf("expected 9 tools over legacy SSE, got %d", len(tools.Tools))
+	}
+	result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "opencode_setup", Arguments: map[string]any{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.IsError {
+		t.Fatalf("unexpected setup error over legacy SSE: %#v", result.Content)
 	}
 }

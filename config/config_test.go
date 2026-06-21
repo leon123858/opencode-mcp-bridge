@@ -14,7 +14,7 @@ func TestLoadDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.OpenCodeURL != "http://127.0.0.1:4096" || cfg.ListenAddress != ":8080" || cfg.RequestTimeout != 30*time.Second {
+	if cfg.OpenCodeURL != "http://127.0.0.1:4096" || cfg.ListenAddress != ":8080" || cfg.RequestTimeout != 60*time.Minute {
 		t.Fatalf("unexpected defaults: %#v", cfg)
 	}
 }

@@ -22,7 +22,7 @@ func Load() (Config, error) {
 		OpenCodeURL:    strings.TrimRight(envOrDefault("OPENCODE_BASE_URL", "http://127.0.0.1:4096"), "/"),
 		Username:       os.Getenv("OPENCODE_SERVER_USERNAME"),
 		Password:       os.Getenv("OPENCODE_SERVER_PASSWORD"),
-		RequestTimeout: 30 * time.Second,
+		RequestTimeout: 60 * time.Minute,
 	}
 	if value := os.Getenv("BRIDGE_REQUEST_TIMEOUT"); value != "" {
 		d, err := time.ParseDuration(value)

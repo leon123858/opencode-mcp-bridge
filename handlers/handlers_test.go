@@ -152,3 +152,21 @@ func TestUpstreamHTTPErrorIsPreserved(t *testing.T) {
 		t.Fatalf("expected 404, got %d", rec.Code)
 	}
 }
+
+func TestLegacySSEPathIsMounted(t *testing.T) {
+	called := false
+	legacyHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		if r.URL.Path != "/mcp/sse" {
+			t.Errorf("unexpected path %q", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+	e := server.New(handlers.New(fakeClient{}), nil, legacyHandler)
+	req := httptest.NewRequest(http.MethodGet, "/mcp/sse", nil)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	if !called || rec.Code != http.StatusNoContent {
+		t.Fatalf("legacy SSE handler was not mounted: called=%v status=%d", called, rec.Code)
+	}
+}

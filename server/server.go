@@ -26,6 +26,9 @@ func New(h *handlers.Handler, mcpHandler ...http.Handler) *echo.Echo {
 		e.Any("/", wrapped)
 		e.Any("/mcp", wrapped)
 	}
+	if len(mcpHandler) > 1 && mcpHandler[1] != nil {
+		e.Any("/mcp/sse", echo.WrapHandler(mcpHandler[1]))
+	}
 	g := e.Group("/opencode")
 	g.GET("/setup", h.Setup)
 	g.POST("/ask", h.Ask)

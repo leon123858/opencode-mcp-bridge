@@ -70,10 +70,10 @@ type providerTestArgs struct {
 
 func New(c OpenCodeClient) (*mcp.Server, http.Handler) {
 	server := mcp.NewServer(&mcp.Implementation{Name: "opencode-mcp-bridge", Version: "0.1.0"}, &mcp.ServerOptions{
-		Instructions: "Use these tools to communicate with an already running OpenCode server. Start OpenCode manually with `opencode serve` if setup reports it unavailable.",
+		Instructions: "Use these tools to communicate with an already running OpenCode server. Start OpenCode manually with `opencode serve` if setup reports it unavailable. Always pass the 'ses_...' prefix for session IDs.",
 	})
 
-	mcp.AddTool(server, &mcp.Tool{Name: "opencode_setup", Description: "Check OpenCode health and current project."}, func(ctx context.Context, _ *mcp.CallToolRequest, _ emptyArgs) (*mcp.CallToolResult, any, error) {
+	mcp.AddTool(server, &mcp.Tool{Name: "opencode_setup", Description: "Verify OpenCode is running and return the active project's workspace details."}, func(ctx context.Context, _ *mcp.CallToolRequest, _ emptyArgs) (*mcp.CallToolResult, any, error) {
 		health, err := c.Health(ctx)
 		if err != nil {
 			return toolError(err), nil, nil
@@ -89,7 +89,7 @@ func New(c OpenCodeClient) (*mcp.Server, http.Handler) {
 		return jsonResult(map[string]any{"healthy": true, "health": health, "project": project}), nil, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{Name: "opencode_ask", Description: "Create a session, send one prompt, and return the assistant response."}, func(ctx context.Context, _ *mcp.CallToolRequest, args askArgs) (*mcp.CallToolResult, any, error) {
+	mcp.AddTool(server, &mcp.Tool{Name: "opencode_ask", Description: "Start a new conversation with OpenCode. Provide a prompt. Returns a new sessionId starting with 'ses_' and the assistant's response. Do NOT use this if you want to follow up on an existing session."}, func(ctx context.Context, _ *mcp.CallToolRequest, args askArgs) (*mcp.CallToolResult, any, error) {
 		if strings.TrimSpace(args.Prompt) == "" {
 			return validationError("prompt is required"), nil, nil
 		}
@@ -100,9 +100,12 @@ func New(c OpenCodeClient) (*mcp.Server, http.Handler) {
 		return jsonResult(result), nil, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{Name: "opencode_reply", Description: "Send a follow-up prompt to an existing session."}, func(ctx context.Context, _ *mcp.CallToolRequest, args replyArgs) (*mcp.CallToolResult, any, error) {
-		if strings.TrimSpace(args.SessionID) == "" || strings.TrimSpace(args.Prompt) == "" {
-			return validationError("sessionId and prompt are required"), nil, nil
+	mcp.AddTool(server, &mcp.Tool{Name: "opencode_reply", Description: "Continue an existing OpenCode conversation. MUST provide a valid sessionId starting with 'ses_'. Returns the assistant's response."}, func(ctx context.Context, _ *mcp.CallToolRequest, args replyArgs) (*mcp.CallToolResult, any, error) {
+		if errResult := validateSessionID(args.SessionID); errResult != nil {
+			return errResult, nil, nil
+		}
+		if strings.TrimSpace(args.Prompt) == "" {
+			return validationError("prompt is required"), nil, nil
 		}
 		result, err := c.SendMessage(ctx, bridgetypes.ReplyRequest{SessionID: args.SessionID, Prompt: args.Prompt, ProviderID: args.ProviderID, ModelID: args.ModelID, Agent: args.Agent})
 		if err != nil {
@@ -111,7 +114,7 @@ func New(c OpenCodeClient) (*mcp.Server, http.Handler) {
 		return jsonResult(result), nil, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{Name: "opencode_run", Description: "Run a task asynchronously and wait until OpenCode completes it."}, func(ctx context.Context, _ *mcp.CallToolRequest, args runArgs) (*mcp.CallToolResult, any, error) {
+	mcp.AddTool(server, &mcp.Tool{Name: "opencode_run", Description: "Start a long-running background task on OpenCode. The task runs asynchronously up to maxDurationSeconds. Returns the final session state."}, func(ctx context.Context, _ *mcp.CallToolRequest, args runArgs) (*mcp.CallToolResult, any, error) {
 		if strings.TrimSpace(args.Prompt) == "" {
 			return validationError("prompt is required"), nil, nil
 		}
@@ -131,9 +134,9 @@ func New(c OpenCodeClient) (*mcp.Server, http.Handler) {
 		return jsonResult(result), nil, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{Name: "opencode_check", Description: "Get session state; optionally include todos and file changes."}, func(ctx context.Context, _ *mcp.CallToolRequest, args checkArgs) (*mcp.CallToolResult, any, error) {
-		if strings.TrimSpace(args.SessionID) == "" {
-			return validationError("sessionId is required"), nil, nil
+	mcp.AddTool(server, &mcp.Tool{Name: "opencode_check", Description: "Poll the status of an ongoing OpenCode session. MUST provide a valid sessionId starting with 'ses_'. Optionally include 'detailed' to see todos and file diffs."}, func(ctx context.Context, _ *mcp.CallToolRequest, args checkArgs) (*mcp.CallToolResult, any, error) {
+		if errResult := validateSessionID(args.SessionID); errResult != nil {
+			return errResult, nil, nil
 		}
 		session, err := c.Session(ctx, args.SessionID)
 		if err != nil {
@@ -155,9 +158,9 @@ func New(c OpenCodeClient) (*mcp.Server, http.Handler) {
 		return jsonResult(result), nil, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{Name: "opencode_conversation", Description: "Return the message history for a session."}, func(ctx context.Context, _ *mcp.CallToolRequest, args conversationArgs) (*mcp.CallToolResult, any, error) {
-		if strings.TrimSpace(args.SessionID) == "" {
-			return validationError("sessionId is required"), nil, nil
+	mcp.AddTool(server, &mcp.Tool{Name: "opencode_conversation", Description: "Retrieve the history of messages for an existing session. MUST provide a valid sessionId starting with 'ses_'. Useful to see what was discussed."}, func(ctx context.Context, _ *mcp.CallToolRequest, args conversationArgs) (*mcp.CallToolResult, any, error) {
+		if errResult := validateSessionID(args.SessionID); errResult != nil {
+			return errResult, nil, nil
 		}
 		if args.Limit < 0 || args.Limit > 1000 {
 			return validationError("limit must be between 1 and 1000"), nil, nil
@@ -211,6 +214,12 @@ func New(c OpenCodeClient) (*mcp.Server, http.Handler) {
 	return server, handler
 }
 
+// NewLegacySSEHandler exposes the HTTP+SSE transport from the MCP 2024-11-05
+// specification. New clients should prefer the Streamable HTTP handler.
+func NewLegacySSEHandler(server *mcp.Server) http.Handler {
+	return mcp.NewSSEHandler(func(*http.Request) *mcp.Server { return server }, nil)
+}
+
 func toAskRequest(args askArgs) bridgetypes.AskRequest {
 	return bridgetypes.AskRequest{Prompt: args.Prompt, Title: args.Title, ProviderID: args.ProviderID, ModelID: args.ModelID, Agent: args.Agent}
 }
@@ -233,6 +242,17 @@ func rawResult(raw json.RawMessage) *mcp.CallToolResult {
 
 func validationError(message string) *mcp.CallToolResult {
 	return &mcp.CallToolResult{IsError: true, Content: []mcp.Content{&mcp.TextContent{Text: message}}}
+}
+
+func validateSessionID(id string) *mcp.CallToolResult {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return validationError("sessionId is required")
+	}
+	if !strings.HasPrefix(id, "ses_") {
+		return validationError("sessionId must start with 'ses_'")
+	}
+	return nil
 }
 
 func toolError(err error) *mcp.CallToolResult {

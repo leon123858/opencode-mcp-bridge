@@ -25,8 +25,9 @@ func main() {
 
 	httpClient := &http.Client{Timeout: cfg.RequestTimeout}
 	opencode := client.New(cfg.OpenCodeURL, cfg.Username, cfg.Password, httpClient)
-	_, mcpHandler := mcpbridge.New(opencode)
-	e := server.New(handlers.New(opencode), mcpHandler)
+	mcpServer, mcpHandler := mcpbridge.New(opencode)
+	legacySSEHandler := mcpbridge.NewLegacySSEHandler(mcpServer)
+	e := server.New(handlers.New(opencode), mcpHandler, legacySSEHandler)
 
 	go func() {
 		log.Printf("opencode MCP bridge listening on %s (OpenCode: %s)", cfg.ListenAddress, cfg.OpenCodeURL)

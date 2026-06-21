@@ -1,8 +1,6 @@
 .PHONY: help deps fmt vet test build run e2e check clean
 
 POWERSHELL := powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass
-GOCACHE := $(CURDIR)/.cache/go-build
-export GOCACHE
 
 help:
 	@$(POWERSHELL) -Command "Write-Host 'Targets: deps fmt vet test build run e2e check clean'"
