@@ -23,6 +23,9 @@ profile.cov
 # Go workspace file
 go.work
 go.work.sum
+.cache/
+.run/
+bin/
 
 # env file
 .env
